@@ -1,0 +1,421 @@
+import { useEffect, useState, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useAppSelector } from "../store/hooks";
+import { getRoomDetail, joinRoom, leaveRoom, getAgoraToken, kickUser, muteUser } from "../api/roomApi";
+import type { RoomDetailResponse } from "../types";
+import AgoraRTC from "agora-rtc-sdk-ng";
+import type { IAgoraRTCClient, IAgoraRTCRemoteUser } from "agora-rtc-sdk-ng";
+
+function RoomDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAppSelector((state) => state.auth);
+
+  const [room, setRoom] = useState<RoomDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isInRoom, setIsInRoom] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
+
+  const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const localAudioTrackRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!id) {
+      console.error("No room ID in URL");
+      navigate("/");
+      return;
+    }
+
+    if (!isAuthenticated) {
+      console.log("Not authenticated, redirecting to login");
+      navigate("/login");
+      return;
+    }
+
+    console.log("Loading room:", id);
+    loadRoomData();
+
+    return () => {
+      const client = clientRef.current;
+      if (client) {
+        const audioTrack = localAudioTrackRef.current;
+        if (audioTrack) {
+          audioTrack.close();
+        }
+        client.leave().catch(console.error);
+        clientRef.current = null;
+      }
+    };
+  }, [id, isAuthenticated, navigate]);
+
+// ✅ AUTO-JOIN - Prevent double join
+useEffect(() => {
+  if (room && !isInRoom && isAuthenticated && !clientRef.current && !isJoining) {
+    console.log("Auto-joining voice chat...");
+    handleJoinRoom();
+  }
+}, [room, isInRoom, isAuthenticated, isJoining]);
+
+// ✅ Auto-refresh participants every 3 seconds
+useEffect(() => {
+  if (!isInRoom || !room) return;
+
+  const interval = setInterval(() => {
+    console.log("🔄 Refreshing participants...");
+    loadRoomData();
+  }, 3000); // 3 seconds
+
+  return () => clearInterval(interval);
+}, [isInRoom, room?.id]);
+
+  const loadRoomData = async () => {
+  if (!id) return;
+  
+  try {
+    console.log("Fetching room detail for ID:", id);
+    const data = await getRoomDetail(Number(id));
+    console.log("Room data loaded:", data);
+    
+    // ✅ Check if current user is still in participants
+    const token = localStorage.getItem("token");
+    const payload = token ? JSON.parse(atob(token.split('.')[1])) : null;
+    const currentUserId = payload ? parseInt(payload.sub) : null;
+    
+    const isStillInRoom = data.participants.some(p => p.id === currentUserId);
+    
+    if (isInRoom && !isStillInRoom) {
+      // ✅ User was kicked!
+      console.log("❌ You were kicked from the room!");
+      setError("You were removed from this room");
+      
+      // Leave Agora
+      const client = clientRef.current;
+      if (client) {
+        const audioTrack = localAudioTrackRef.current;
+        if (audioTrack) {
+          audioTrack.close();
+        }
+        await client.leave();
+        clientRef.current = null;
+      }
+      
+      // Redirect after 2 seconds
+      setTimeout(() => {
+        navigate("/");
+      }, 2000);
+      
+      return;
+    }
+    
+    setRoom(data);
+    setLoading(false);
+  } catch (err) {
+    console.error("Load room error:", err);
+    setError("Failed to load room");
+    setLoading(false);
+  }
+};
+
+  const handleJoinRoom = async () => {
+  // ✅ Prevent double join
+  if (isJoining) {
+    console.log("Already joining, skipping...");
+    return;
+  }
+
+  try {
+    setIsJoining(true);
+    setError(null);
+    
+    const token = localStorage.getItem("token");
+    const payload = token ? JSON.parse(atob(token.split('.')[1])) : null;
+    const currentUserId = payload ? parseInt(payload.sub) : null;
+    const isCreator = currentUserId === room?.creator_id;
+
+    if (!isCreator) {
+      console.log("Step 1: Joining room in backend...");
+      await joinRoom(Number(id));
+    } else {
+      console.log("User is creator, skipping backend join (already joined on create)");
+    }
+
+    console.log("Step 2: Getting Agora token...");
+    const tokenData = await getAgoraToken(Number(id));
+    console.log("Token received:", tokenData);
+
+    console.log("Step 3: Creating Agora client...");
+    const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    clientRef.current = client;
+
+    console.log("Step 4: Joining Agora channel...", {
+      appId: import.meta.env.VITE_AGORA_APP_ID,
+      channel: tokenData.channel_name,
+      uid: tokenData.uid
+    });
+
+    await client.join(
+      import.meta.env.VITE_AGORA_APP_ID,
+      tokenData.channel_name,
+      tokenData.token,
+      tokenData.uid
+    );
+
+    console.log("✅ Successfully joined Agora channel!");
+
+    client.on("user-published", async (user: IAgoraRTCRemoteUser, mediaType: "audio" | "video") => {
+      console.log("🔊 User published:", user.uid, mediaType);
+      await client.subscribe(user, mediaType);
+      if (mediaType === "audio") {
+        user.audioTrack?.play();
+        console.log("▶️ Playing audio from user:", user.uid);
+      }
+    });
+
+    client.on("user-unpublished", (user: IAgoraRTCRemoteUser, mediaType: "audio" | "video") => {
+      console.log("🔇 User unpublished:", user.uid, mediaType);
+    });
+
+    setIsInRoom(true);
+    console.log("✅ Voice chat ready!");
+    
+    loadRoomData();
+
+  } catch (err: any) {
+    console.error("❌ Join error:", err);
+    setError(err.response?.data?.detail || err.message || "Failed to join room");
+  } finally {
+    setIsJoining(false);
+  }
+};
+
+
+  const handleToggleMic = async () => {
+    try {
+      const client = clientRef.current;
+      if (!client) {
+        console.error("No Agora client!");
+        return;
+      }
+
+      if (!isMicOn) {
+        console.log("Turning mic ON...");
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        await client.publish(audioTrack);
+        localAudioTrackRef.current = audioTrack;
+        setIsMicOn(true);
+        console.log("✅ Mic is ON");
+      } else {
+        console.log("Turning mic OFF...");
+        const audioTrack = localAudioTrackRef.current;
+        if (audioTrack) {
+          await client.unpublish(audioTrack);
+          audioTrack.close();
+          localAudioTrackRef.current = null;
+        }
+        setIsMicOn(false);
+        console.log("✅ Mic is OFF");
+      }
+    } catch (err) {
+      console.error("Toggle mic error:", err);
+      setError("Failed to toggle microphone");
+    }
+  };
+  
+  const handleLeaveRoom = async () => {
+    try {
+      const client = clientRef.current;
+      if (client) {
+        const audioTrack = localAudioTrackRef.current;
+        if (audioTrack) {
+          audioTrack.close();
+        }
+        await client.leave();
+        clientRef.current = null;
+      }
+
+      try {
+        await leaveRoom(Number(id));
+        console.log("Left room in backend");
+      } catch (err) {
+        console.error("Leave room error:", err);
+      }
+
+      navigate("/");
+    } catch (err) {
+      console.error("Leave error:", err);
+      navigate("/");
+    }
+  };
+
+  const handleKick = async (userId: number) => {
+    try {
+      await kickUser(Number(id), userId);
+      loadRoomData();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Failed to kick user");
+    }
+  };
+
+  const handleMute = async (userId: number) => {
+    try {
+      await muteUser(Number(id), userId);
+      loadRoomData();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Failed to mute user");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
+        <div className="text-white">Loading room...</div>
+      </div>
+    );
+  }
+
+  if (!room) {
+    return (
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
+        <div className="text-white">Room not found</div>
+      </div>
+    );
+  }
+
+  const token = localStorage.getItem("token");
+  const payload = token ? JSON.parse(atob(token.split('.')[1])) : null;
+  const currentUserId = payload ? parseInt(payload.sub) : null;
+  const isCreator = currentUserId === room.creator_id;
+
+  return (
+    <div className="min-h-screen bg-dark-bg">
+      <header className="bg-dark-card border-b border-dark-border">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">{room.title}</h1>
+            <p className="text-gray-400 text-sm">{room.topic}</p>
+          </div>
+          <button
+            onClick={handleLeaveRoom}
+            className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors"
+          >
+            Leave Room
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-500">
+            {error}
+          </div>
+        )}
+
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            {/* Voice Controls - Always show if in room */}
+            {isInRoom && (
+              <div className="bg-dark-card border border-dark-border rounded-xl p-8">
+                <h2 className="text-xl font-semibold text-white mb-6 text-center">
+                  Voice Controls
+                </h2>
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleToggleMic}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                      isMicOn
+                        ? "bg-accent hover:bg-green-600"
+                        : "bg-red-500 hover:bg-red-600"
+                    }`}
+                  >
+                    {isMicOn ? (
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                <p className="text-center text-gray-400 mt-4">
+                  {isMicOn ? "Microphone ON" : "Microphone OFF"}
+                </p>
+              </div>
+            )}
+
+            {/* Loading state */}
+            {!isInRoom && (
+              <div className="bg-dark-card border border-dark-border rounded-xl p-8 text-center">
+                <div className="text-white">Connecting to voice chat...</div>
+              </div>
+            )}
+          </div>
+
+          {/* Participants */}
+          <div className="bg-dark-card border border-dark-border rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Participants ({room.participants.length}/{room.max_participants})
+            </h3>
+
+            <div className="space-y-3">
+              {room.participants.map((participant,index) => (
+                <div
+                   key={`participant-${participant.id}-${index}`}
+                  className="flex items-center justify-between p-3 bg-dark-bg rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                      <span className="text-primary font-semibold">
+                        {participant.username[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">
+                        {participant.username}
+                        {participant.id === room.creator_id && (
+                          <span className="ml-2 text-xs text-accent">Host</span>
+                        )}
+                      </p>
+                      {participant.is_muted && (
+                        <p className="text-xs text-red-500">Muted</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {isCreator && participant.id !== currentUserId && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleMute(participant.id)}
+                        className="p-2 hover:bg-dark-card rounded transition-colors"
+                        title="Mute/Unmute"
+                      >
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleKick(participant.id)}
+                        className="p-2 hover:bg-red-500/20 rounded transition-colors"
+                        title="Kick"
+                      >
+                        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default RoomDetail;
