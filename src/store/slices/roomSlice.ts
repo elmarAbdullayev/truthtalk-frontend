@@ -32,13 +32,19 @@ export const createRoom = createAsyncThunk(
 const roomSlice = createSlice({
   name: "room",
   initialState,
-  reducers: {},
+  reducers: {
+     silentRefresh: (state) => {
+    // Trigger refresh without loading state
+  }
+  },
   extraReducers: (builder) => {
     // Fetch Rooms
     builder
       .addCase(fetchRooms.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+        if (state.rooms.length === 0) {
+    state.loading = true;
+  }
+  state.error = null;
       })
       .addCase(fetchRooms.fulfilled, (state, action) => {
         state.loading = false;

@@ -30,11 +30,13 @@ function RoomList() {
     navigate("/login");
   };
 
-  // ✅ Auto-refresh room list every 5 seconds
+// ✅ REPLACE existing auto-refresh useEffect:
 useEffect(() => {
+  // ✅ Silent background refresh (no loading state change)
   const interval = setInterval(() => {
+    // Fetch without triggering loading state
     dispatch(fetchRooms());
-  }, 5000); // 5 seconds
+  }, 5000);
 
   return () => clearInterval(interval);
 }, [dispatch]);
