@@ -4,6 +4,7 @@ import Register from './pages/Register'
 import RoomList from './pages/RoomList'
 import RoomDetail from './pages/RoomDetail'
 import NotFound from './pages/NotFound'  
+import AdminDashboard from './pages/AdminDashboard'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/room/:id" element={<RoomDetail />} />
+        <Route path="/admin" element={<AdminDashboard />} /> 
         <Route path="*" element={<NotFound />} /> 
       </Routes>
     </div>

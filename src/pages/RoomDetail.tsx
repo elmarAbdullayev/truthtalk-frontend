@@ -354,7 +354,7 @@ useEffect(() => {
 
   const token = localStorage.getItem("token");
   const payload = token ? JSON.parse(atob(token.split('.')[1])) : null;
-  const currentUserId = payload ? parseInt(payload.sub) : null;
+  const currentUserId = payload ? parseInt(payload.sub) : null;   
   const isCreator = currentUserId === room.creator_id;
 
   return (
