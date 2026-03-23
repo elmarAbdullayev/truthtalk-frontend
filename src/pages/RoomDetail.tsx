@@ -55,10 +55,26 @@ useEffect(() => {
 // ✅ AUTO-JOIN - Prevent double join
 useEffect(() => {
   if (room && !isInRoom && isAuthenticated && !clientRef.current && !isJoining) {
+    // ✅ Check if room is full
+    if (room.participants.length >= room.max_participants) {
+      const token = localStorage.getItem("token");
+      const payload = token ? JSON.parse(atob(token.split('.')[1])) : null;
+      const currentUserId = payload ? parseInt(payload.sub) : null;
+      
+      // Check if current user is already in room
+      const isAlreadyIn = room.participants.some(p => p.id === currentUserId);
+      
+      if (!isAlreadyIn) {
+        setError("This room is full");
+        setTimeout(() => navigate("/"), 3000);
+        return;
+      }
+    }
+    
     console.log("Auto-joining voice chat...");
     handleJoinRoom();
   }
-}, [room, isInRoom, isAuthenticated, isJoining]);
+}, [room, isInRoom, isAuthenticated, isJoining, navigate]);
 
 // ✅ REPLACE existing auto-refresh useEffect with this:
 useEffect(() => {
@@ -152,8 +168,9 @@ useEffect(() => {
   }
 };
 
+
+
   const handleJoinRoom = async () => {
-  // ✅ Prevent double join
   if (isJoining) {
     console.log("Already joining, skipping...");
     return;
@@ -166,13 +183,20 @@ useEffect(() => {
     const token = localStorage.getItem("token");
     const payload = token ? JSON.parse(atob(token.split('.')[1])) : null;
     const currentUserId = payload ? parseInt(payload.sub) : null;
-    const isCreator = currentUserId === room?.creator_id;
 
-    if (!isCreator) {
+    // Check if user is ACTUALLY in participants
+    const isAlreadyParticipant = room?.participants.some(p => p.id === currentUserId);
+
+    // Join backend if NOT already a participant
+    if (!isAlreadyParticipant) {
       console.log("Step 1: Joining room in backend...");
       await joinRoom(Number(id));
+      
+      // ✅ Refresh immediately after backend join
+      await loadRoomData();
+      console.log("✅ Refreshed participants after join");
     } else {
-      console.log("User is creator, skipping backend join (already joined on create)");
+      console.log("Already a participant in backend");
     }
 
     console.log("Step 2: Getting Agora token...");
@@ -183,12 +207,7 @@ useEffect(() => {
     const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
     clientRef.current = client;
 
-    console.log("Step 4: Joining Agora channel...", {
-      appId: import.meta.env.VITE_AGORA_APP_ID,
-      channel: tokenData.channel_name,
-      uid: tokenData.uid
-    });
-
+    console.log("Step 4: Joining Agora channel...");
     await client.join(
       import.meta.env.VITE_AGORA_APP_ID,
       tokenData.channel_name,
@@ -213,12 +232,27 @@ useEffect(() => {
 
     setIsInRoom(true);
     console.log("✅ Voice chat ready!");
-    
-    loadRoomData();
 
-  } catch (err: any) {
+  }  catch (err: any) {
     console.error("❌ Join error:", err);
-    setError(err.response?.data?.detail || err.message || "Failed to join room");
+    
+    // ✅ Better error messages
+    let errorMessage = "Failed to join room";
+    
+    if (err.response?.data?.detail) {
+      errorMessage = err.response.data.detail;
+    } else if (err.message) {
+      errorMessage = err.message;
+    }
+    
+    setError(errorMessage);
+    
+    // ✅ If room is full, redirect after 3 seconds
+    if (errorMessage.includes("full") || errorMessage.includes("Full")) {
+      setTimeout(() => {
+        navigate("/");
+      }, 3000);
+    }
   } finally {
     setIsJoining(false);
   }
@@ -340,11 +374,17 @@ useEffect(() => {
   </header>
 
   <main className="max-w-7xl mx-auto px-4 py-8">
-    {error && (
-      <div className="mb-4 p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-500">
-        {error}
-      </div>
+{error && (
+  <div className="mb-4 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
+    <p className="text-red-500 font-semibold mb-2">⚠️ Error</p>
+    <p className="text-red-400">{error}</p>
+    {(error.includes("full") || error.includes("Full")) && (
+      <p className="text-gray-400 text-sm mt-2">
+        Redirecting to room list in 3 seconds...
+      </p>
     )}
+  </div>
+)}
 
     <div className="grid md:grid-cols-3 gap-6">
       
