@@ -127,6 +127,7 @@ useEffect(() => {
     console.log("Fetching room detail for ID:", id);
     const data = await getRoomDetail(Number(id));
     console.log("Room data loaded:", data);
+    console.log(data.participants)
     
     // ✅ Check if current user is still in participants
     const token = localStorage.getItem("token");

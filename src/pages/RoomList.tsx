@@ -153,40 +153,53 @@ const handleJoinRoom = (roomId: number) => {
 
         {/* Room Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {rooms.map((room) => (
-            <div
-              key={room.id}
-              className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary/50 transition-all"
-            >
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  {room.title}
-                </h3>
-                <p className="text-gray-400 text-sm mb-3">{room.topic}</p>
-                
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
-                    {room.language}
-                  </span>
-                  <span className="px-3 py-1 bg-accent/10 text-accent rounded-full">
-                    {room.participant_count}/{room.max_participants} 👥
-                  </span>
-                </div>
-              </div>
 
-              <button
-                onClick={() => handleJoinRoom(room.id)}
-                disabled={!isAuthenticated && room.participant_count >= room.max_participants}
-                className={`w-full py-2 rounded-lg font-medium transition-all ${
-                  isAuthenticated
-                    ? "bg-primary hover:bg-blue-600 text-white"
-                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
-                }`}
-              >
-                {isAuthenticated ? "Join Room" : "Login to Join"}
-              </button>
-            </div>
-          ))}
+{rooms.map((room) => (
+  <div
+    key={room.id}
+    className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary/50 transition-all"
+  >
+    <div className="mb-4">
+      <h3 className="text-xl font-semibold text-white mb-2">
+        {room.title}
+      </h3>
+      <p className="text-gray-400 text-sm mb-3">{room.topic}</p>
+      
+      <div className="flex items-center gap-2 text-sm">
+        <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
+          {room.language}
+        </span>
+        <span className={`px-3 py-1 rounded-full ${
+          room.participant_count >= room.max_participants
+            ? "bg-red-500/10 text-red-500"
+            : "bg-accent/10 text-accent"
+        }`}>
+          {room.participant_count}/{room.max_participants} 👥
+        </span>
+      </div>
+    </div>
+
+    {/* ✅ Join Button with Full Check */}
+    <button
+      onClick={() => handleJoinRoom(room.id)}
+      disabled={!isAuthenticated || room.participant_count >= room.max_participants}
+      className={`w-full py-2 rounded-lg font-medium transition-all ${
+        room.participant_count >= room.max_participants
+          ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+          : isAuthenticated
+          ? "bg-primary hover:bg-blue-600 text-white"
+          : "bg-gray-700 text-gray-400 cursor-not-allowed"
+      }`}
+    >
+      {room.participant_count >= room.max_participants
+        ? "Room is Full"
+        : isAuthenticated
+        ? "Join Room"
+        : "Login to Join"}
+    </button>
+  </div>
+))}
+        
         </div>
 
         {rooms.length === 0 && !loading && (
