@@ -10,6 +10,7 @@ function RoomList() {
   const dispatch = useAppDispatch();
   const { rooms, loading, error } = useAppSelector((state) => state.room);
   const { isAuthenticated } = useAppSelector((state) => state.auth);
+  const [locError, setLocError] = useState<string | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState<RoomCreate>({
@@ -19,6 +20,47 @@ function RoomList() {
     max_participants: 10,
     is_public: true,
   });
+
+
+  // ✅ Auto-refresh only if no error
+useEffect(() => {
+  if (error?.includes("banned")) {
+    // Don't auto-refresh if banned
+    return;
+  }
+
+  const interval = setInterval(() => {
+    dispatch(fetchRooms());
+  }, 2000);
+
+  return () => clearInterval(interval);
+}, [dispatch, error]);
+
+  useEffect(() => {
+  const loadRooms = async () => {
+    try {
+      await dispatch(fetchRooms()).unwrap();
+      setLocError(null);
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || "Failed to load rooms";
+      setLocError(errorMsg);
+      
+      // If banned, logout
+      if (errorMsg.includes("banned") || errorMsg.includes("Banned")) {
+        setTimeout(() => {
+          alert("Your account has been banned.");
+          dispatch(logout());
+          navigate("/login");
+        }, 1000);
+      }
+    }
+  };
+  
+  dispatch(initializeAuth());
+  loadRooms();
+}, [dispatch]);
+
+
 
   useEffect(() => {
     dispatch(initializeAuth());
@@ -55,8 +97,6 @@ const handleCreateRoom = async (e: React.FormEvent) => {
   e.preventDefault();
   try {
     const result = await dispatch(createRoom(formData)).unwrap();
-    console.log("Room created:", result); // ← Debug log
-    
     setShowCreateModal(false);
     setFormData({
       title: "",
@@ -65,12 +105,31 @@ const handleCreateRoom = async (e: React.FormEvent) => {
       max_participants: 10,
       is_public: true,
     });
-    
-    // Navigate to room
     navigate(`/room/${result.id}`);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Failed to create room:", err);
-    alert("Failed to create room: " + err); // ← Show error
+    
+    // ✅ Better error handling
+    let errorMessage = "Failed to create room";
+    
+    if (err.response?.data?.detail) {
+      errorMessage = err.response.data.detail;
+    } else if (err.message) {
+      errorMessage = err.message;
+    }
+    
+    // ✅ Show error in UI instead of just console
+    alert(errorMessage);
+    
+    // ✅ If banned, redirect to home
+    if (errorMessage.includes("banned") || errorMessage.includes("Banned")) {
+      setShowCreateModal(false);
+      setTimeout(() => {
+        alert("Your account has been banned. Logging out...");
+        dispatch(logout());
+        navigate("/login");
+      }, 1000);
+    }
   }
 };
 
@@ -145,11 +204,13 @@ const handleJoinRoom = (roomId: number) => {
           <div className="text-center text-gray-400 py-12">Loading rooms...</div>
         )}
 
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-500 mb-4">
-            {error}
-          </div>
-        )}
+    {error && (
+  <div className="max-w-7xl mx-auto px-4 mb-4">
+    <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-500">
+      ⚠️ {locError}
+    </div>
+  </div>
+)}
 
         {/* Room Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

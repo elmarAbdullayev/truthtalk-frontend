@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAppSelector } from "../store/hooks";
+import { useAppSelector,useAppDispatch } from "../store/hooks";
+import { logout } from "../store/slices/authSlice"; 
 import { getRoomDetail, joinRoom, leaveRoom, getAgoraToken, kickUser, muteUser } from "../api/roomApi";
 import type { RoomDetailResponse } from "../types";
 import AgoraRTC from "agora-rtc-sdk-ng";
@@ -20,6 +21,8 @@ function RoomDetail() {
 
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localAudioTrackRef = useRef<any>(null);
+
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
   if (!id) {
@@ -234,7 +237,7 @@ useEffect(() => {
     setIsInRoom(true);
     console.log("✅ Voice chat ready!");
 
-  }  catch (err: any) {
+  } catch (err: any) {
     console.error("❌ Join error:", err);
     
     // ✅ Better error messages
@@ -248,7 +251,16 @@ useEffect(() => {
     
     setError(errorMessage);
     
-    // ✅ If room is full, redirect after 3 seconds
+    // ✅ If banned, redirect after showing message
+    if (errorMessage.includes("banned") || errorMessage.includes("Banned")) {
+      setTimeout(() => {
+        alert("Your account has been banned. Logging out...");
+        dispatch(logout());
+        navigate("/login");
+      }, 2000);
+    }
+    
+    // ✅ If room full, redirect
     if (errorMessage.includes("full") || errorMessage.includes("Full")) {
       setTimeout(() => {
         navigate("/");
