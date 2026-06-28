@@ -1,73 +1,131 @@
-# React + TypeScript + Vite
+# TruthTalk – Real-Time Voice Room Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## 📌 Overview
 
-Currently, two official plugins are available:
+TruthTalk is a full-stack real-time voice communication platform where users can create, join, and manage voice rooms.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The system includes authentication, role-based access control (admin/user), room management, and real-time voice communication using Agora SDK.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## ⚙️ Tech Stack
 
-## Expanding the ESLint configuration
+### Backend
+- FastAPI
+- SQLAlchemy
+- MySQL (PyMySQL)
+- JWT Authentication (python-jose)
+- Passlib (bcrypt)
+- Agora RTC Token Builder
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Frontend
+- React + TypeScript
+- Redux Toolkit
+- Axios
+- React Router
+- TailwindCSS
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 🚀 Features
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### Authentication
+- User registration and login
+- JWT-based authentication
+- Password hashing with bcrypt
+- Persistent login using localStorage
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Voice Rooms
+- Create and join voice rooms
+- Public and private rooms
+- Language-based filtering
+- Maximum participants control
+- Real-time voice communication using Agora
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
+
+### Room Management
+- Join / leave rooms
+- Kick and mute users (room owner only)
+- Auto delete room when empty
+- Close room functionality
+
+---
+
+### Admin Panel
+- View platform statistics
+- Ban / unban users
+- Manage rooms
+- Force close rooms
+- Remove users from rooms
+
+---
+
+## 🏗️ Architecture
+
+Frontend (React + Redux)  
+→ API Layer (Axios)  
+→ FastAPI Backend  
+→ MySQL Database  
+→ Agora Real-Time Voice Service
+
+---
+
+## 🔑 Backend Structure
+
+- auth → authentication (register/login/JWT)
+- rooms → room lifecycle management
+- admin → admin controls
+- core → security & dependencies
+- services → Agora token generation
+
+---
+
+## 📡 API Endpoints
+
+### Auth
+- POST `/auth/register`
+- POST `/auth/login`
+
+### Rooms
+- GET `/rooms`
+- POST `/rooms`
+- POST `/rooms/{id}/join`
+- POST `/rooms/{id}/leave`
+- POST `/rooms/{id}/kick/{user_id}`
+
+### Admin
+- GET `/admin/stats`
+- GET `/admin/users`
+- POST `/admin/users/{id}/ban`
+- POST `/admin/rooms/{id}/close`
+
+---
+
+## 🔥 Key Highlights
+
+- Real-time voice communication system
+- Full authentication + authorization system
+- Role-based access (Admin / User)
+- Scalable backend architecture
+- Clean API design
+- Production-style full-stack project
+
+---
+
+## 🚀 Future Improvements
+
+- WebSocket real-time updates
+- Chat system inside rooms
+- Notifications system
+- Docker deployment
+- CI/CD pipeline
+
+---
+
+## 👨‍💻 Author
+
+Full-Stack Developer Project  
+Built with FastAPI + React + Agora
